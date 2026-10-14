@@ -4,12 +4,12 @@ import { translator, ORDER } from "./i18n.mjs";
 import { renderApp, isAgent, CHUNK, layoutTrend, highlight, anchors, olderUnloaded, BOUNDARY, eventId, expandedRoles } from "./components.mjs";
 import { demoCall } from "./demo.mjs";
 const root=document.getElementById("root");
-const INFO={name:"zcode-context",version:"0.3.8"};
+const INFO={name:"zcode-context",version:"0.3.9"};
 const demo=new URLSearchParams(location.search).get("demo")==="1";
 let app=null,t=translator(),view=initialView(),boundSession=null,overview=null,items=[],hasOlder=false,historyPage=0;
 let detail=null,content=null,more={},notice=null,busy=false,activeLoads=0;
 const eventDetails=new Map();
-let generation=0,detailSequence=0,contentSequence=0,moreSequence={},toolCallsDigest=null;
+let generation=0,detailSequence=0,contentSequence=0,moreSequence={},toolCallsDigest=null,branch=null,branchEpoch=0;
 let pendingRender=false,renderedSelection=null,scrollTarget=null,jumpToMatch=false,keepRightEdge=null,reveal=null;
 // Bumped by every navigation, so an event navigation still waiting for history does not override a later choice.
 let navigation=0;
@@ -116,6 +116,9 @@ async function refresh(force=false) {
     if(fresh){generation++;boundSession=next.sessionId;view=restoreView(boundSession);items=[];detail=null;content=null;more={};moreSequence={};historyPage=0;overview=null;eventDetails.clear();}
     if(next.unchanged){idlePolls++;if(notice?.kind==="error"){notice=null;render(true);}return;}
     idlePolls=0;overview=next;
+    // What a compaction summarized depends on the active branch, so a rewind (or a forced refresh) rereads it.
+    const nextBranch=next.conversation?.branch??null;
+    if(force||nextBranch!==branch){branch=nextBranch;branchEpoch++;eventDetails.clear();}
     // Call counts are session-wide, so a pinned step's schema counts and call sort follow them.
     const calls=JSON.stringify(next.toolCalls??null),callsChanged=calls!==toolCallsDigest;toolCallsDigest=calls;
     items=mergeSnapshots(items.filter(x=>!next.history?.loadedKeys||next.history.loadedKeys.includes(x.key)),next.trajectories);
@@ -142,13 +145,20 @@ async function refresh(force=false) {
 async function loadDetail(background=false,keepMore=false) {
   const key=view.selectedKey;if(!key)return;
   const sequence=++detailSequence,expected=generation,L=lens(view);
+  // Call counts reorder and relabel schemas, so schema pages already shown are reread with the first page: kept as they
+  // were, an item moved off the first page would be on no page at all.
+  const schemaPages=keepMore?more.schema?.page??0:0;
+  if(schemaPages)moreSequence.schema={};
   startLoad();
   try {
     const focusKey=view.open?.key===key?view.open.elementKey:view.focus?.stepKey===key?view.focus.summary??undefined:undefined;
-    const next=await call("get_context_request",{key,search:L.search,searchScope:L.searchAll?"loaded":"selected",toolPrefix:L.toolPrefix||undefined,
-      sort:view.sort,schemaSort:view.schemaSort,focusKey,...baselineArgs()});
+    const args={key,search:L.search,toolPrefix:L.toolPrefix||undefined,sort:view.sort,schemaSort:view.schemaSort,...baselineArgs()};
+    const [next,...pages]=await Promise.all([call("get_context_request",{...args,searchScope:L.searchAll?"loaded":"selected",focusKey}),
+      ...Array.from({length:schemaPages},(_,i)=>call("get_context_request",{...args,searchScope:"selected",role:"schema",page:i+1}))]);
     if(sequence!==detailSequence||expected!==generation||key!==view.selectedKey||next.sessionId!==boundSession)return;
-    detail=next;if(!keepMore){more={};moreSequence={};}
+    detail=next;
+    if(!keepMore){more={};moreSequence={};}
+    else if(schemaPages)more={...more,schema:{page:schemaPages,items:pages.flatMap(x=>x.elements)}};
     if(!items.some(x=>x.key===key))items=mergeSnapshots(items,[next.summary]);
     const openSummary=settleFocus(key,next);
     // The page is short while a step loads, so the target is revealed again once its content is in.
@@ -205,13 +215,13 @@ async function loadMore(role) {
   }catch(error){if(expected===generation)showError(error);}
 }
 async function loadEventDetail(id,background=false) {
-  const expected=generation;
+  const expected=generation,epoch=branchEpoch,stale=()=>expected!==generation||epoch!==branchEpoch;
   eventDetails.set(id,{state:"loading"});render(background);
   try {
     const next=await call("get_context_summary",{eventDetail:id});
-    if(expected!==generation)return;
+    if(stale())return;
     eventDetails.set(id,next.eventDetail?{state:"ready",data:next.eventDetail}:{state:"failed"});
-  }catch(error){if(expected===generation)eventDetails.set(id,{state:"failed",code:error?.code});}
+  }catch(error){if(stale())return;eventDetails.set(id,{state:"failed",code:error?.code});}
   render(background);
 }
 // One page at a time: a second click or an event's history load joins the read in flight, and the cursor follows
