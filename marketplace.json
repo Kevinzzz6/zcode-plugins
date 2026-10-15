@@ -1153,6 +1153,7 @@
         "url": "https://github.com/Kevinzzz6"
       },
       "category": "developer-tools",
+      "icon": "https://cdn-zcode.z.ai/zcode/official-plugin/assets/zcode-context/icon.png",
       "keywords": [
         "context",
         "tokens",
