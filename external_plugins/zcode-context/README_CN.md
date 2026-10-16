@@ -63,6 +63,10 @@
 
 源码位于 [`ui-plugins/zcode-context/`](../../ui-plugins/zcode-context)。在仓库根目录执行 `pnpm install` 和 `pnpm build` 构建；测试用 `node --test test/*.test.mjs` 运行。上游项目：<https://github.com/Kevinzzz6/zcode-context>。
 
+## 致谢
+
+界面与交互设计参考了 [dsh-context](https://github.com/bowenliang123/dsh-context)，并针对 ZCode 重新实现。感谢原作者开源分享。
+
 ## 许可证
 
 [MIT](./LICENSE)

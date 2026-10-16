@@ -63,6 +63,10 @@ The plugin reads ZCode CLI's local records only — the session database (`db/db
 
 Source lives in [`ui-plugins/zcode-context/`](../../ui-plugins/zcode-context). Build with `pnpm install` and `pnpm build` from the repository root; tests run with `node --test test/*.test.mjs`. Upstream project: <https://github.com/Kevinzzz6/zcode-context>.
 
+## Acknowledgements
+
+UI and interaction design draws on [dsh-context](https://github.com/bowenliang123/dsh-context), reimplemented for ZCode. Thanks to its author for sharing the project.
+
 ## License
 
 [MIT](./LICENSE)
